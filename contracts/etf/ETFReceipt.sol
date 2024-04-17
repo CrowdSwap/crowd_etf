@@ -14,11 +14,6 @@ contract ETFReceipt is
     IETFReceipt,
     OwnableUpgradeable
 {
-    struct InvestDetails {
-        uint256 amount;
-        uint256 price;
-    }
-
     uint16 public constant MAX_P = 1e4;
     address private ETFProxyAddress;
 
@@ -103,7 +98,7 @@ contract ETFReceipt is
     }
 
     /**
-     * @notice To activate/deactivate an existing plan
+     * @notice To activate/deactivate an existing plan or change the name of a plan
      * @param _planId The id of specific plan
      * @param _name The new name of the plan.
      * @param _isActive The new status of the plan
@@ -123,6 +118,7 @@ contract ETFReceipt is
     }
 
     function setETFProxyAddress(address _ETFProxyAddress) external onlyOwner {
+        _requiredValidAddress(_ETFProxyAddress);
         ETFProxyAddress = _ETFProxyAddress;
     }
 
@@ -254,14 +250,10 @@ contract ETFReceipt is
             tokenDetails: _tokenDetails
         });
 
-        bytes memory a = structToBytes(_newInvest);
+        bytes memory _byteData = structToBytes(_newInvest);
 
-        receipts2.push(a);
+        receipts2.push(_byteData);
 
-        // receipts.push(_newInvest);
-        // for (uint256 i = 0; i < _tokenDetails.length; i++) {
-        //     tokenDetails[_id].push(_tokenDetails[i]);
-        // }
         _mint(_to, _id);
         emit Minted(_to, _id);
         return _id;
@@ -323,20 +315,25 @@ contract ETFReceipt is
             tokenDetails: _tokenDetails
         });
 
-        bytes memory a = structToBytes(_newInvest);
+        bytes memory _byteData = structToBytes(_newInvest);
 
-        receipts2.push(a);
-
-        // receipts.push(_newInvest);
-        // for (uint256 i = 0; i < _tokenDetails.length; i++) {
-        //     tokenDetails[_newId].push(_tokenDetails[i]);
-        // }
+        receipts2.push(_byteData);
 
         _mint(_to, _newId);
         emit BurnedAndMinted(_tokenId, _to, _newId);
     }
 
     function _authorizeUpgrade(address) internal override onlyOwner {}
+    
+    /**
+    * @notice Requires a valid address.
+    * @param _address The address to be validated.
+    * @dev Internal function to ensure that the provided address is not the zero address.
+    *      Reverts with an error message if the provided address is not valid.
+    */
+    function _requiredValidAddress(address _address) internal pure {
+        require(_address != address(0), "ETFProxy: address is not valid");
+    }
 
     /**
      * @dev Internal function to validate token percentages for a new plan.
@@ -348,22 +345,34 @@ contract ETFReceipt is
     function _requiredValidTokenPercentages(
         TokenPercentage[] memory _tokenPercentages
     ) private pure {
+        address[] memory _tokenAddresses = new address[](_tokenPercentages.length);
         uint16 count;
         for (uint256 i = 0; i < _tokenPercentages.length; i++) {
             require(
                 _tokenPercentages[i].token != address(0),
                 "ETFReceipt: one of the addresses is invalid"
             );
+            require(_existAddressInArray(_tokenAddresses, _tokenPercentages[i].token) == false, "ETFReceipt: duplicate tokens");
             require(
                 _tokenPercentages[i].percentage != 0,
                 "ETFReceipt: one of the percentages is invalid"
             );
             count += _tokenPercentages[i].percentage;
+            _tokenAddresses[i] = _tokenPercentages[i].token;
         }
         require(
             count == MAX_P,
             "ETFReceipt: There is a miscalculation in plan percentages"
         );
+    }
+
+    function _existAddressInArray(address[] memory _tokenAddresses, address token) public pure returns (bool){
+        for(uint i = 0; i < _tokenAddresses.length; i++){
+            if(_tokenAddresses[i] == token){
+                return true;
+            }
+        }
+        return false;
     }
 
     function structToBytes(InvestDetail memory _struct) public pure returns (bytes memory) {

@@ -12,7 +12,6 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "./IETFReceipt.sol";
-import "hardhat/console.sol";
 
 contract ETFProxy is
     Initializable,
@@ -67,8 +66,8 @@ contract ETFProxy is
     event SetFee(
         address indexed user,
         address feeTo,
-        uint256 stakeFee,
-        uint256 unstakeFee
+        uint256 investFee,
+        uint256 withdrawFee
     );
 
     event Invested(
@@ -86,6 +85,8 @@ contract ETFProxy is
 
     event SetSwapContract(address indexed swapContract);
     event SetETFReceiptAddress(address indexed ETFReceipt);
+
+    event coinTransfer(address indexed from, address indexed to, uint256 value);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -118,8 +119,6 @@ contract ETFProxy is
         _setFee(_feeInfo);
     }
 
-    receive() external payable {}
-
     /**
      * @notice Allows a user to invest in a specified plan.
      * @param _userAddress The address of the user making the investment.
@@ -138,6 +137,8 @@ contract ETFProxy is
         uint256 _amountIn,
         SwapInfo[] memory _swaps
     ) external payable nonReentrant whenNotPaused {
+        require(_amountIn < type(uint128).max && _planId < type(uint16).max, "ETFProxy: amountIn or planId overflowed");
+
         IETFReceipt _ETFReceipt = IETFReceipt(ETFReceiptAddress);
 
         IETFReceipt.PlanDetail memory _planDetail = _ETFReceipt.planByPlanId(
@@ -224,7 +225,8 @@ contract ETFProxy is
         IERC20Upgradeable _tokenOut,
         uint16 _percentage,
         SwapInfo[] memory _swaps
-    ) external nonReentrant whenNotPaused {
+    ) external nonReentrant {
+        require(_tokenId < type(uint32).max, "ETFProxy: tokenId overflowed");
         _requiredValidPercentage(_percentage);
 
         IETFReceipt _ETFReceipt = IETFReceipt(ETFReceiptAddress);
@@ -287,6 +289,7 @@ contract ETFProxy is
         uint256 _tokenId,
         uint16 _percentage
     ) external nonReentrant whenNotPaused {
+        require(_tokenId < type(uint32).max, "ETFProxy: tokenId overflowed");
         _requiredValidPercentage(_percentage);
         IETFReceipt _ETFReceipt = IETFReceipt(ETFReceiptAddress);
         IETFReceipt.InvestDetail memory _invest = _ETFReceipt.tokenByTokenId(
@@ -349,7 +352,7 @@ contract ETFProxy is
             _ETFReceipt.burn(_tokenId);
         }
 
-        emit Withdrawn(msg.sender, _tokenId, _invest.id);
+        emit Withdrawn(msg.sender, _tokenId, _invest.planId);
     }
 
     /**
@@ -360,6 +363,7 @@ contract ETFProxy is
     function setETFReceiptAddress(
         address _ETFReceiptAddress
     ) external onlyOwner {
+        _requiredValidAddress(_ETFReceiptAddress);
         ETFReceiptAddress = _ETFReceiptAddress;
         emit SetETFReceiptAddress(_ETFReceiptAddress);
     }
@@ -434,7 +438,7 @@ contract ETFProxy is
         uint256 _amount,
         uint256 _percentage
     ) internal pure returns (uint256) {
-        return (_amount * _percentage) / 1e20;
+        return (_amount * _percentage) / MAX_FEE;
     }
 
     /**
@@ -459,6 +463,9 @@ contract ETFProxy is
             _finalBalance - _initialBalance == _amount,
             "ETFProxy: Token transfer failed"
         );
+        if (_token.isETH()) {
+            emit coinTransfer(address(this), _to, _amount);
+        }
     }
 
     /**
@@ -619,16 +626,6 @@ contract ETFProxy is
 
             uint256 _remainsAmount = _invest.tokenDetails[i].amount -
                 _amountOut;
-            // if (_doubleCheckPrice) {
-            //     _checkAmountOut(
-            //         _invest.tokenDetails[i].token,
-            //         address(_tokenOut),
-            //         _swaps[i].price,
-            //         _tokenOutPrice,
-            //         _slicedAmountIn,
-            //         _amountOut
-            //     );
-            // }
 
             if (_percentage != MAX_P) {
                 IETFReceipt.TokenDetail memory _tokenDetail = IETFReceipt
