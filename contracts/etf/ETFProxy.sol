@@ -119,6 +119,8 @@ contract ETFProxy is
         _setFee(_feeInfo);
     }
 
+    receive() external payable {}
+
     /**
      * @notice Allows a user to invest in a specified plan.
      * @param _userAddress The address of the user making the investment.
