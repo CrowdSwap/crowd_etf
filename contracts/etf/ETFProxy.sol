@@ -634,7 +634,7 @@ contract ETFProxy is
                     .TokenDetail({
                         token: _invest.tokenDetails[i].token,
                         amount: uint128(_remainsAmount),
-                        price: uint16(_invest.tokenDetails[i].price)
+                        price: _invest.tokenDetails[i].price
                     });
 
                 _tokenDetails[i] = _tokenDetail;
