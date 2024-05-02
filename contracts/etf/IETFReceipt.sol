@@ -4,20 +4,20 @@ pragma solidity 0.8.10;
 interface IETFReceipt {
     struct TokenDetail {
         address token;
-        uint256 amount;
-        uint256 price;
+        uint128 amount;
+        uint64 price;
     }
 
     struct Invest {
-        uint256 id;
-        uint256 planId;
-        uint256 createTime;
+        uint32 id;
+        uint16 planId;
+        uint32 createTime;
     }
 
     struct InvestDetail {
-        uint256 id;
-        uint256 planId;
-        uint256 createTime;
+        uint32 id;
+        uint16 planId;
+        uint32 createTime;
         TokenDetail[] tokenDetails;
     }
 
@@ -40,16 +40,16 @@ interface IETFReceipt {
 
     function mint(
         address to,
-        uint256 planId,
+        uint16 planId,
         TokenDetail[] memory tokenDetails
     ) external returns (uint256);
 
     function burn(uint256 tokenId) external;
 
     function burnAndMint(
-        uint256 tokenId,
+        uint32 tokenId,
         address to,
-        uint256 planId,
+        uint16 planId,
         TokenDetail[] memory tokenDetails
     ) external;
 

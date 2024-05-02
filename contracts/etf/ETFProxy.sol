@@ -12,7 +12,6 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "./IETFReceipt.sol";
-import "hardhat/console.sol";
 
 contract ETFProxy is
     Initializable,
@@ -32,7 +31,7 @@ contract ETFProxy is
     */
     struct SwapInfo {
         IERC20Upgradeable token;
-        uint256 price;
+        uint64 price;
         bytes data;
     }
 
@@ -67,8 +66,8 @@ contract ETFProxy is
     event SetFee(
         address indexed user,
         address feeTo,
-        uint256 stakeFee,
-        uint256 unstakeFee
+        uint256 investFee,
+        uint256 withdrawFee
     );
 
     event Invested(
@@ -86,6 +85,8 @@ contract ETFProxy is
 
     event SetSwapContract(address indexed swapContract);
     event SetETFReceiptAddress(address indexed ETFReceipt);
+
+    event coinTransfer(address indexed from, address indexed to, uint256 value);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -138,6 +139,8 @@ contract ETFProxy is
         uint256 _amountIn,
         SwapInfo[] memory _swaps
     ) external payable nonReentrant whenNotPaused {
+        require(_amountIn < type(uint128).max && _planId < type(uint16).max, "ETFProxy: amountIn or planId overflowed");
+
         IETFReceipt _ETFReceipt = IETFReceipt(ETFReceiptAddress);
 
         IETFReceipt.PlanDetail memory _planDetail = _ETFReceipt.planByPlanId(
@@ -146,7 +149,9 @@ contract ETFProxy is
 
         require(_planDetail.active, "ETFProxy: Plan is not active.");
 
+
         _requiredValidSwapInfo(_swaps, _planDetail.tokenPercentages);
+
 
         if (!_tokenIn.isETH()) {
             _transferTokenFromTo(
@@ -165,6 +170,7 @@ contract ETFProxy is
 
         IETFReceipt.TokenDetail[]
             memory _tokenDetails = new IETFReceipt.TokenDetail[](_swaps.length);
+
         for (uint256 i = 0; i < _swaps.length; i++) {
             uint256 _slicedAmountIn = (_amount *
                 _planDetail.tokenPercentages[i].percentage) / MAX_P;
@@ -190,7 +196,7 @@ contract ETFProxy is
             IETFReceipt.TokenDetail memory _tokenDetail = IETFReceipt
                 .TokenDetail({
                     token: address(_swaps[i].token),
-                    amount: _amountOut,
+                    amount: uint128(_amountOut),
                     price: _swaps[i].price
                 });
 
@@ -199,10 +205,9 @@ contract ETFProxy is
 
         uint256 _investId = _ETFReceipt.mint(
             _userAddress,
-            _planDetail.id,
+            uint16(_planDetail.id),
             _tokenDetails
         );
-
         emit Invested(_userAddress, _investId, _planDetail.id, msg.sender);
     }
 
@@ -222,7 +227,8 @@ contract ETFProxy is
         IERC20Upgradeable _tokenOut,
         uint16 _percentage,
         SwapInfo[] memory _swaps
-    ) external nonReentrant whenNotPaused {
+    ) external nonReentrant {
+        require(_tokenId < type(uint32).max, "ETFProxy: tokenId overflowed");
         _requiredValidPercentage(_percentage);
 
         IETFReceipt _ETFReceipt = IETFReceipt(ETFReceiptAddress);
@@ -262,7 +268,7 @@ contract ETFProxy is
 
         if (_percentage != MAX_P) {
             _ETFReceipt.burnAndMint(
-                _tokenId,
+                uint32(_tokenId),
                 msg.sender,
                 _invest.planId,
                 _remainsTokenDetails
@@ -285,6 +291,7 @@ contract ETFProxy is
         uint256 _tokenId,
         uint16 _percentage
     ) external nonReentrant whenNotPaused {
+        require(_tokenId < type(uint32).max, "ETFProxy: tokenId overflowed");
         _requiredValidPercentage(_percentage);
         IETFReceipt _ETFReceipt = IETFReceipt(ETFReceiptAddress);
         IETFReceipt.InvestDetail memory _invest = _ETFReceipt.tokenByTokenId(
@@ -300,7 +307,7 @@ contract ETFProxy is
         for (uint i = 0; i < _invest.tokenDetails.length; i++) {
             address _token = _invest.tokenDetails[i].token;
             uint256 _amount = _invest.tokenDetails[i].amount;
-            uint256 _price = _invest.tokenDetails[i].price;
+            uint64 _price = _invest.tokenDetails[i].price;
 
             uint256 _beforeAmount = IERC20Upgradeable(_token).uniBalanceOf(
                 address(this)
@@ -328,7 +335,7 @@ contract ETFProxy is
                 IETFReceipt.TokenDetail memory _tokenDetail = IETFReceipt
                     .TokenDetail({
                         token: _token,
-                        amount: _remainsAmount,
+                        amount: uint128(_remainsAmount),
                         price: _price
                     });
 
@@ -338,7 +345,7 @@ contract ETFProxy is
 
         if (_percentage != MAX_P) {
             _ETFReceipt.burnAndMint(
-                _tokenId,
+                uint32(_tokenId),
                 msg.sender,
                 _invest.planId,
                 _tokenDetails
@@ -347,7 +354,7 @@ contract ETFProxy is
             _ETFReceipt.burn(_tokenId);
         }
 
-        emit Withdrawn(msg.sender, _tokenId, _invest.id);
+        emit Withdrawn(msg.sender, _tokenId, _invest.planId);
     }
 
     /**
@@ -358,6 +365,7 @@ contract ETFProxy is
     function setETFReceiptAddress(
         address _ETFReceiptAddress
     ) external onlyOwner {
+        _requiredValidAddress(_ETFReceiptAddress);
         ETFReceiptAddress = _ETFReceiptAddress;
         emit SetETFReceiptAddress(_ETFReceiptAddress);
     }
@@ -432,7 +440,7 @@ contract ETFProxy is
         uint256 _amount,
         uint256 _percentage
     ) internal pure returns (uint256) {
-        return (_amount * _percentage) / 1e20;
+        return (_amount * _percentage) / MAX_FEE;
     }
 
     /**
@@ -457,6 +465,9 @@ contract ETFProxy is
             _finalBalance - _initialBalance == _amount,
             "ETFProxy: Token transfer failed"
         );
+        if (_token.isETH()) {
+            emit coinTransfer(address(this), _to, _amount);
+        }
     }
 
     /**
@@ -617,23 +628,13 @@ contract ETFProxy is
 
             uint256 _remainsAmount = _invest.tokenDetails[i].amount -
                 _amountOut;
-            // if (_doubleCheckPrice) {
-            //     _checkAmountOut(
-            //         _invest.tokenDetails[i].token,
-            //         address(_tokenOut),
-            //         _swaps[i].price,
-            //         _tokenOutPrice,
-            //         _slicedAmountIn,
-            //         _amountOut
-            //     );
-            // }
 
             if (_percentage != MAX_P) {
                 IETFReceipt.TokenDetail memory _tokenDetail = IETFReceipt
                     .TokenDetail({
                         token: _invest.tokenDetails[i].token,
-                        amount: _remainsAmount,
-                        price: _invest.tokenDetails[i].price
+                        amount: uint128(_remainsAmount),
+                        price: uint16(_invest.tokenDetails[i].price)
                     });
 
                 _tokenDetails[i] = _tokenDetail;

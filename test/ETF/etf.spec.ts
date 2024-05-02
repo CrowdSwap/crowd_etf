@@ -1200,6 +1200,96 @@ describe("ETFProxy Contract", function () {
     );
   });
 
+  it("Should pack/unpack InvestDetail", async function () {
+    const { hardhatETFReceipt, hardhatETFProxy } = await createPlan();
+
+    await hardhatETFReceipt
+      .connect(owner)
+      .setETFProxyAddress(hardhatETFProxy.address);
+
+      // console.log(owner.address)
+      // console.log(account1.address)
+      
+
+    const packedInvestDetail = await hardhatETFReceipt.structToBytes({
+      id: 11,
+      planId: 10,
+      createTime: 123456789,
+      tokenDetails: [
+        {
+          token: owner.address, //f39fd6e51aad88f6f4ce6ab8827279cfffb92266
+          amount: ethers.utils.parseEther("100000000000"),
+          price: 9999,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+        {
+          token: account1.address,
+          amount: 4321,
+          price: 1111,
+        },
+      ],
+    });
+
+    console.log("packedInvestDetail", packedInvestDetail)
+
+    const unpackedInvestDetail =
+      await hardhatETFReceipt.bytesToStruct(packedInvestDetail);
+
+    console.log(unpackedInvestDetail);
+
+    expect(unpackedInvestDetail.id).to.be.eq(11);
+    expect(unpackedInvestDetail.planId).to.be.eq(10);
+    expect(unpackedInvestDetail.createTime).to.be.eq(123456789);
+    expect(unpackedInvestDetail.tokenDetails.length).to.be.eq(10);
+    expect(unpackedInvestDetail.tokenDetails[0].token).to.be.eq(owner.address);
+    expect(unpackedInvestDetail.tokenDetails[0].amount.toString()).to.be.eq("100000000000000000000000000000");
+    expect(unpackedInvestDetail.tokenDetails[0].price).to.be.eq(9999);
+    expect(unpackedInvestDetail.tokenDetails[1].token).to.be.eq(
+      account1.address
+    );
+    expect(unpackedInvestDetail.tokenDetails[1].amount).to.be.eq(4321);
+    expect(unpackedInvestDetail.tokenDetails[1].price).to.be.eq(1111);
+  });
+
   async function mintNFT(
     tokens,
     hardhatETFReceipt,
